@@ -376,7 +376,7 @@ double GainRobustTracker::trackImageRobustPyr(const cv::Mat &old_image,
 
       // Todo: How to chose value for omega
       double omega = 1.0;
-      double tua = 0.5;
+      double tua = 4.936461e-001;
 
       // Todo: check if opencv utilizes the sparsity of U, change use Eigen?
       cv::Mat D(5, 4, CV_64F, 0.0);
@@ -398,16 +398,14 @@ double GainRobustTracker::trackImageRobustPyr(const cv::Mat &old_image,
       double c2 = theta.at<double>(1);
       double c3 = theta.at<double>(2);
 
-      cv::Matx33d R = cv::Mat(((D.t() * D).inv() * cv::Mat((D * theta - b).t() * (D * theta - b)).at<double>(0, 0))(cv::Rect(0, 0, 3, 3)));
-
-      // std::cout << A << std::endl;
+      // std::cout << D << std::endl;
       // std::cout << b << std::endl;
       // std::cout << K << std::endl;
-       std::cout << c1 << ", " << c2 << ", " << c3 << std::endl;
-      // std::cout << R << std::endl;
+      // std::cout << c1 << ", " << c2 << ", " << c3 << std::endl;
 
       // Todo: create thread to update radiometric parameters
       // Update radiometric parameters
+      cv::Matx33d R = cv::Mat(((D.t() * D).inv() * cv::Mat((D * theta - b).t() * (D * theta - b)).at<double>(0))(cv::Rect(0, 0, 3, 3)));
       updateRadiometricParameters(c1, c2, c3, R);
 
       // Solve for the displacements
@@ -488,13 +486,14 @@ int GainRobustTracker::updateRadiometricParameters(double c1, double c2, double 
     P_ = (cv::Matx33d::eye() - k) * covariance_;
 
     cv::SVD svd(P_);
-    if (svd.w.row(svd.w.cols-1).at<double>(0) < 1e-5) {
+    const double max_eigen_value = svd.w.at<double>(0);
+    if (max_eigen_value < 1e-3) {
       radiometric_converged_ = true;
       getInverseResponse();
     }
-      std::cout << radiometric_parameters_ << std::endl;
-     // std::cout << P_ << std::endl;
-     // std::cout << svd.w << std::endl;
+    // std::cout << radiometric_parameters_ << std::endl;
+    // std::cout << P_ << std::endl;
+    // std::cout << svd.w << std::endl;
   }
 }
 
@@ -550,13 +549,55 @@ void GainRobustTracker::getInverseResponse() {
   inverse_response_function_.at(0) = 0;
   inverse_response_function_.at(255) = 1.0;
 
-  double min = applyResponse(0);
-  double max = applyResponse(255 / 255.0);
-
   // For each inverse response value i find s
   for (int i = 1; i < 255; i++) {
-    inverse_response_function_.at(i) = (applyResponse(i / 255.0) - min) / (max - min);
+    inverse_response_function_.at(i) = applyResponse(i / 255.0);
   }
+
+  // Given a response vector, find Grossberg parameters that fit well
+  cv::Matx33d left_side = cv::Matx33d::zeros();
+  cv::Vec3d right_side(0, 0, 0);
+  for (int i = 10; i < 240; i++) {
+    double input = i/256.0;
+
+    double g0 = evaluateGrossbergBaseFunction(0, false, input);
+    double g1 = evaluateGrossbergBaseFunction(1, false, input);
+    double g2 = evaluateGrossbergBaseFunction(2, false, input);
+    double g3 = evaluateGrossbergBaseFunction(3, false, input);
+
+    // For equation 1
+    left_side(0,0) += g1*g1;
+    left_side(0,1) += g1*g2;
+    left_side(0,2) += g1*g3;
+
+    right_side(0) += (inverse_response_function_[i]*g1 - g0*g1);
+
+    // For equation 2
+    left_side(1,0) += g2*g1;
+    left_side(1,1) += g2*g2;
+    left_side(1,2) += g2*g3;
+
+    right_side(1) += (inverse_response_function_[i]*g2 - g0*g2);
+
+    // For equation 3
+    left_side(2,0) += g3*g1;
+    left_side(2,1) += g3*g2;
+    left_side(2,2) += g3*g3;
+
+    right_side(2) += (inverse_response_function_[i]*g3 - g0*g3);
+  }
+  cv::Vec3d solution;
+  cv::solve(left_side, right_side, solution, cv::DECOMP_SVD);
+  radiometric_parameters_ = solution;
+
+  for (int i = 1; i < 255; i++) {
+    inverse_response_function_.at(i) = applyResponse(i / 255.0);
+  }
+
+//  for (auto& item : inverse_response_function_) {
+//    std::cout << item << ' ';
+//  }
+//  std::cout << std::endl;
 }
 
 double GainRobustTracker::applyResponse(double x) {

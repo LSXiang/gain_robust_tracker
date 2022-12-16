@@ -18,13 +18,13 @@
 #include "gain_robust_tracker.h"
 
 // Number of active features aimed at when tracking
-#define MAX_NR_ACTIVE_FEATURES (300)
+#define MAX_NR_ACTIVE_FEATURES (100)
 
 // Number of pyramid levels used for KLT tracking
 #define NR_PYRAMID_LEVELS (3)
 
 // Patch size used for KLT offset optimization
-#define KLT_PATCH_SIZE (2)
+#define KLT_PATCH_SIZE (3)
 
 // Forward backward tracking error threshold (if error is larger than this the track is set invalid)
 #define FWD_BWD_TRACKING_THRESH (2.0)
@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
         continue;
 
       cv::circle(draw_image, tracked_points_new_frame.at(p), 3, cv::Scalar(0, 255, 0));
-      cv::line(draw_image, old_features.at(p), tracked_points_new_frame.at(p), cv::Scalar(0, 255, 0));
+      cv::line(draw_image, old_features.at(p), tracked_points_new_frame.at(p), cv::Scalar(0, 255, 255));
     }
 
     for (const auto& p : new_feature_locations) {
