@@ -12,5 +12,5 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 add_library(gainRobustTracker src/gain_robust_tracker.cc)
 target_link_libraries(gainRobustTracker ${OpenCV_LIBS})
 
-add_executable(gain_robust_tracker example/main.cpp)
+add_executable(gain_robust_tracker example/main.cc)
 target_link_libraries(gain_robust_tracker gainRobustTracker ${OpenCV_LIBS})
